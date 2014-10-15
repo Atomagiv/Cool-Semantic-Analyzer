@@ -183,6 +183,9 @@ Symbol ClassTable::lookup_attr(Symbol class_name, Symbol var_name)
 
 Feature ClassTable::lookup_method(Symbol class_name, Symbol method_name)
 {
+  if (class_name == No_type) {
+    class_name = curr_class->get_name();
+  }
   Class_ class_ = lookup_class(class_name);
   assert(class_);
   return class_->get_method(method_name);
@@ -190,17 +193,34 @@ Feature ClassTable::lookup_method(Symbol class_name, Symbol method_name)
 
 bool ClassTable::leq(Symbol class1, Symbol class2)
 {
+  if (class1 == No_type || class2 == No_type || class1 == class2) {
+    return true;
+  }
+
   Class_ class1_ = lookup_class(class1);
   Class_ class2_ = lookup_class(class2);
   assert(class1_ && class2_);
-  if (class1_ == class2_) {
-    return true;
-  }
 
   if (class1_->get_parent() != No_class) {
     return leq(class1_->get_parent(), class2);
   }
   return false;
+}
+
+Symbol ClassTable::lub(Symbol class1, Symbol class2)
+{
+  if (leq(class1, class2)) {
+    return class2;
+  } else if (leq(class2, class1)) {
+    return class1;
+  }
+
+  Class_ class1_ = lookup_class(class1);
+  assert(class1_);
+  if (class1_->get_parent() != No_class) {
+    return lub(class1_->get_parent(), class2);
+  }
+  return Object;
 }
 
 Symbol class__class::get_attr(Symbol var)
@@ -442,21 +462,180 @@ void class__class::semant()
 
 void method_class::semant()
 {
+  SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
+  object_table->enterscope();
+
+  for(int i = formals->first(); formals->more(i); i = formals->next(i)) {
+    formals->nth(i)->semant();
+  }
+
   expr->semant();
   if (curr_classtable->leq(expr->get_type(), return_type) == false) {
     curr_classtable->semant_error(curr_class);
     cerr << "Method body has type " << expr->get_type() << " but function has type " << return_type << endl;
   }
+  object_table->exitscope();
+}
+
+void formal_class::semant()
+{
+  SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
+  object_table->addid(name, new Symbol(type_decl));
 }
 
 void attr_class::semant()
 {
-  if (init != no_expr()) {
-    init->semant();
-    if (curr_classtable->leq(init->get_type(), type_decl) == false) {
-      curr_classtable->semant_error(curr_class);
-      cerr << "Initialization has type " << init->get_type() << " but function has type " << type_decl << endl;
+  init->semant();
+  if (curr_classtable->leq(init->get_type(), type_decl) == false) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Initialization has type " << init->get_type() << " but function has type " << type_decl << endl;
+  }
+}
+
+void assign_class::semant()
+{
+  Symbol type_decl = curr_classtable->lookup_attr(curr_class->get_name(), name);
+  expr->semant();
+  if (!type_decl) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Variable " << name << " does not exist in this scope" << endl;
+    type = Object;
+    return;
+  }
+  if (curr_classtable->leq(expr->get_type(), type_decl)) {
+    type = expr->get_type();
+  } else {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Expression type " << expr->get_type() << " does not inherit from " << type_decl << endl;
+    type = Object;
+  }
+}
+
+int method_class::get_arg_len()
+{
+  int i = formals->first();
+  while(formals->more(i)) {
+    i = formals->next(i);
+  }
+  return i;
+}
+
+Symbol method_class::get_arg_type(int i)
+{
+  assert(i < get_arg_len());
+  return formals->nth(i)->get_type_decl();
+}
+
+int get_arg_len(Expressions exprs)
+{
+  int i = exprs->first();
+  while(exprs->more(i)) {
+    i = exprs->next(i);
+  }
+  return i;
+}
+
+void static_dispatch_class::semant()
+{
+  bool success = true;
+  Feature method;
+
+  expr->semant();
+  if (curr_classtable->leq(expr->get_type(), type_name) == false) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Expression of type " << expr->get_type() << " does not inherit from static dispatch type name " << type_name << endl;
+    success = false;
+  }
+  method = curr_classtable->lookup_method(type_name, name);
+  if (method == NULL) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "No method " << name << " in class " << type_name << " found" << endl;
+    success = false;
+  } else if (method->get_arg_len() != get_arg_len(actual)) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Method " << method->get_name() << " only has " << method->get_arg_len() << " arguments" << endl;
+    success = false;
+  }
+  for(int i = actual->first(); actual->more(i); i = actual->next(i)) {
+    actual->nth(i)->semant();
+    if (method == NULL || i >= method->get_arg_len()) {
+      /* Number of arguments is different, error should've been caught above */
+      continue;
     }
+    if (curr_classtable->leq(actual->nth(i)->get_type(), method->get_arg_type(i)) == false) {
+      curr_classtable->semant_error(curr_class);
+      cerr << "Method " << method->get_name() << " argument " << i + 1<< " has type " << method->get_arg_type(i) << endl;
+      success = false;
+    }
+  }
+  if (success) {
+    type = method->get_return_type();
+  } else {
+    type = Object;
+  }
+}
+
+void dispatch_class::semant()
+{
+  bool success = true;
+  Feature method;
+
+  expr->semant();
+  method = curr_classtable->lookup_method(expr->get_type(), name);
+  if (method == NULL) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "No method " << name << " in class " << expr->get_type() << " found" << endl;
+    success = false;
+  } else if (method->get_arg_len() != get_arg_len(actual)) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Method " << method->get_name() << " only has " << method->get_arg_len() << " arguments" << endl;
+    success = false;
+  }
+  for(int i = actual->first(); actual->more(i); i = actual->next(i)) {
+    actual->nth(i)->semant();
+    if (method == NULL || i >= method->get_arg_len()) {
+      /* Number of arguments is different, error should've been caught above */
+      continue;
+    }
+    if (curr_classtable->leq(actual->nth(i)->get_type(), method->get_arg_type(i)) == false) {
+      curr_classtable->semant_error(curr_class);
+      cerr << "Method " << method->get_name() << " argument " << i + 1 << " has type " << method->get_arg_type(i) << endl;
+      success = false;
+    }
+  }
+  if (success) {
+    type = method->get_return_type();
+  } else {
+    type = Object;
+  }
+}
+
+void typcase_class::semant()
+{
+  expr->semant();
+
+  for(int i = cases->first(); cases->more(i); i = cases->next(i)) {
+    cases->nth(i)->semant();
+    if (i == cases->first()) {
+      type = cases->nth(i)->get_expr()->get_type();
+    } else {
+      type = curr_classtable->lub(type, cases->nth(i)->get_expr()->get_type());
+    }
+  }
+}
+
+
+void cond_class::semant()
+{
+  pred->semant();
+  then_exp->semant();
+  else_exp->semant();
+  if (pred->get_type() == Bool) {
+    type = curr_classtable->lub(then_exp->get_type(), else_exp->get_type());
+  } else {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Predicate of conditional is not of type Bool" << endl;
+    type = Object;
   }
 }
 
@@ -471,6 +650,14 @@ void loop_class::semant()
   type = Object;
 }
 
+void branch_class::semant()
+{
+  SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
+  object_table->enterscope();
+  object_table->addid(name, new Symbol(type_decl));
+  expr->semant();
+  object_table->exitscope();
+}
 
 void block_class::semant()
 {
@@ -480,10 +667,22 @@ void block_class::semant()
   }
 }
 
-
 void let_class::semant()
 {
-  // TODO: Write this function
+  SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
+
+  init->semant();
+  object_table->enterscope();
+  object_table->addid(identifier, new Symbol(type_decl));
+  body->semant();
+  if (curr_classtable->leq(init->get_type(), type_decl)) {
+    type = body->get_type();
+  } else {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Expression with type " << init->get_type() << " does not inherit from " <<type_decl << endl;
+    type = Object;
+  }
+  object_table->exitscope();
 }
 
 void plus_class::semant()
@@ -639,13 +838,17 @@ void no_expr_class::semant()
 
 void object_class::semant()
 {
-  Symbol type_decl = curr_classtable->lookup_attr(curr_class->get_name(), name);
-  if (type_decl) {
-    type = type_decl;
+  if (name == self) {
+    type = curr_class->get_name();
   } else {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Object " << name << " not declared in scope" << endl;
-    type = Object;
+    Symbol type_decl = curr_classtable->lookup_attr(curr_class->get_name(), name);
+    if (type_decl) {
+      type = type_decl;
+    } else {
+      curr_classtable->semant_error(curr_class);
+      cerr << "Object " << name << " not declared in scope" << endl;
+      type = Object;
+    }
   }
 }
 

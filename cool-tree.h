@@ -61,6 +61,10 @@ typedef class Feature_class *Feature;
 class Feature_class : public tree_node {
 public:
    virtual int get_environment() = 0;
+   virtual Symbol get_name() = 0;
+   virtual Symbol get_return_type() = 0;
+   virtual Symbol get_arg_type(int i) = 0;
+   virtual int get_arg_len() = 0;
    virtual void semant() = 0;
 
    tree_node *copy()		 { return copy_Feature(); }
@@ -78,6 +82,9 @@ typedef class Formal_class *Formal;
 class Formal_class : public tree_node {
 public:
    tree_node *copy()		 { return copy_Formal(); }
+   virtual void semant() = 0;
+   virtual Symbol get_name() = 0;
+   virtual Symbol get_type_decl() = 0;
    virtual Formal copy_Formal() = 0;
 
 #ifdef Formal_EXTRAS
@@ -109,6 +116,7 @@ public:
    tree_node *copy()		 { return copy_Case(); }
    virtual Case copy_Case() = 0;
    virtual void semant() = 0;
+   virtual Expression get_expr() = 0;
 
 #ifdef Case_EXTRAS
    Case_EXTRAS
@@ -234,6 +242,14 @@ public:
       expr = a4;
    }
    int get_environment();
+   Symbol get_name () {
+     return name;
+   }
+   Symbol get_return_type() {
+     return return_type;
+   }
+   Symbol get_arg_type(int i);
+   int get_arg_len();
    Feature copy_Feature();
    void semant();
    void dump(ostream& stream, int n);
@@ -260,6 +276,19 @@ public:
       init = a3;
    }
    int get_environment();
+   Symbol get_name () {
+     return name;
+   }
+   Symbol get_return_type() {
+     return NULL;
+   }
+   Symbol get_arg_type(int i) {
+     return NULL;
+   };
+   int get_arg_len() {
+     return 0;
+   };
+
    void semant();
    Feature copy_Feature();
    void dump(ostream& stream, int n);
@@ -282,6 +311,13 @@ public:
    formal_class(Symbol a1, Symbol a2) {
       name = a1;
       type_decl = a2;
+   }
+   void semant();
+   Symbol get_name() {
+     return name;
+   }
+   Symbol get_type_decl() {
+     return type_decl;
    }
    Formal copy_Formal();
    void dump(ostream& stream, int n);
@@ -308,6 +344,9 @@ public:
       expr = a3;
    }
    void semant();
+   Expression get_expr() {
+     return expr;
+   };
    Case copy_Case();
    void dump(ostream& stream, int n);
 
