@@ -32,6 +32,10 @@ public:
   ostream& semant_error();
   ostream& semant_error(Class_ c);
   ostream& semant_error(Symbol filename, tree_node *t);
+  int compare_methods(Feature method1, Feature method2);
+  int check_methods();
+  void check_and_add_to_object_table(Symbol name, Symbol type_decl);
+  int add_to_object_table(Symbol name, Symbol type_decl);
   bool leq(Symbol class1, Symbol class2);
   Symbol lub(Symbol class1, Symbol class2);
   Class_ lookup_class(Symbol class_name);
@@ -42,6 +46,7 @@ public:
   int generate_tree();
   int get_environment();
   int check_cycle();
+  int check_main();
 };
 
 #endif

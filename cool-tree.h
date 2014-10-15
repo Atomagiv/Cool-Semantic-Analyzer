@@ -45,6 +45,7 @@ public:
    virtual void add_child(Class_ class_) = 0;
    virtual int check_cycle() = 0;
    virtual void semant() = 0;
+   virtual std::map<Symbol, Feature> * get_method_table() = 0;
 
    tree_node *copy()		 { return copy_Class_(); }
    virtual Class_ copy_Class_() = 0;
@@ -65,6 +66,7 @@ public:
    virtual Symbol get_return_type() = 0;
    virtual Symbol get_arg_type(int i) = 0;
    virtual int get_arg_len() = 0;
+   virtual Formals get_formals() = 0;
    virtual void semant() = 0;
 
    tree_node *copy()		 { return copy_Feature(); }
@@ -248,6 +250,9 @@ public:
    Symbol get_return_type() {
      return return_type;
    }
+   Formals get_formals() {
+     return formals;
+   };
    Symbol get_arg_type(int i);
    int get_arg_len();
    Feature copy_Feature();
@@ -288,7 +293,9 @@ public:
    int get_arg_len() {
      return 0;
    };
-
+   Formals get_formals() {
+     return NULL;
+   };
    void semant();
    Feature copy_Feature();
    void dump(ostream& stream, int n);

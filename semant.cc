@@ -135,6 +135,62 @@ int ClassTable::generate_tree()
   return EXIT_SUCCESS;
 }
 
+int ClassTable::compare_methods(Feature method1, Feature method2)
+{
+  if (method1->get_arg_len() != method2->get_arg_len() ||
+      method1->get_return_type() != method2->get_return_type()) {
+    return EXIT_FAILURE;
+  }
+  Formals formals = method1->get_formals();
+  for (int i = formals->first(); formals->more(i); i = formals->next(i)) {
+    Formal formal1 = method1->get_formals()->nth(i);
+    Formal formal2 = method2->get_formals()->nth(i);
+    if (formal1->get_type_decl() != formal2->get_type_decl()) {
+      return EXIT_FAILURE;
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
+int ClassTable::check_methods()
+{
+  std::map<Symbol, Feature> *method_table;
+  Feature child_method, parent_method;
+  Class_ class_;
+
+  for (std::map<Symbol, Class_>::iterator it = class_table->begin(); it != class_table->end(); it++) {
+    class_ = it->second;
+    if (class_->get_parent() == No_class) {
+      continue;
+    }
+    method_table = class_->get_method_table();
+    for (std::map<Symbol, Feature>::iterator itt = method_table->begin(); itt != method_table->end(); itt++) {
+      child_method = itt->second;
+      parent_method = lookup_method(class_->get_parent(), child_method->get_name());
+      if (parent_method == NULL) {
+	continue;
+      }
+      if (compare_methods(child_method, parent_method)) {
+	semant_error(class_);
+	cerr << "Method " << child_method->get_name() << " redefined with different parameters and/or return type" << endl;
+	return EXIT_FAILURE;
+      }
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
+int ClassTable::check_main()
+{
+  std::map<Symbol, Class_>::iterator it = class_table->find(Main);
+  if (it == class_table->end()) {
+    semant_error();
+    cerr << "Class Main is not defined." << endl;
+    return EXIT_FAILURE;
+  }
+  return EXIT_SUCCESS;
+}
+
 int ClassTable::check_cycle()
 {
   std::map<Symbol, Class_>::iterator it = class_table->find(Object);
@@ -165,19 +221,33 @@ int ClassTable::install_class(Symbol name, Class_ class_)
     cerr << "Class " << name << " already exists" << endl;
     return EXIT_FAILURE;
   }
+  if (name == SELF_TYPE) {
+    semant_error(class_);
+    cerr << "Class cannot have name SELF_TYPE" << endl;
+    return EXIT_FAILURE;
+  }
   class_table->insert(std::pair<Symbol, Class_>(name, class_));
   return EXIT_SUCCESS;
 }
 
 Class_ ClassTable::lookup_class(Symbol class_name)
 {
-  return class_table->find(class_name)->second;
+  if (class_name == SELF_TYPE) {
+    class_name = curr_class->get_name();
+  }
+  std::map<Symbol, Class_>::iterator it = class_table->find(class_name);
+  if (it == class_table->end()) {
+    semant_error(curr_class);
+    cerr << "Type " << class_name << " does not exist" << endl;
+    it = class_table->find(Object);
+    assert(it != class_table->end());
+  }
+  return it->second;
 }
 
 Symbol ClassTable::lookup_attr(Symbol class_name, Symbol var_name)
 {
   Class_ class_ = lookup_class(class_name);
-  assert(class_ != NULL);
   return class_->get_attr(var_name);
 }
 
@@ -187,19 +257,24 @@ Feature ClassTable::lookup_method(Symbol class_name, Symbol method_name)
     class_name = curr_class->get_name();
   }
   Class_ class_ = lookup_class(class_name);
-  assert(class_);
   return class_->get_method(method_name);
 }
 
 bool ClassTable::leq(Symbol class1, Symbol class2)
 {
+  if (class1 == SELF_TYPE) {
+    class1 = curr_class->get_name();
+  }
+  if (class2 == SELF_TYPE) {
+    return false;
+  }
+
   if (class1 == No_type || class2 == No_type || class1 == class2) {
     return true;
   }
 
   Class_ class1_ = lookup_class(class1);
   Class_ class2_ = lookup_class(class2);
-  assert(class1_ && class2_);
 
   if (class1_->get_parent() != No_class) {
     return leq(class1_->get_parent(), class2);
@@ -209,6 +284,13 @@ bool ClassTable::leq(Symbol class1, Symbol class2)
 
 Symbol ClassTable::lub(Symbol class1, Symbol class2)
 {
+  if (class1 == SELF_TYPE) {
+    class1 = curr_class->get_name();
+  }
+  if (class2 == SELF_TYPE) {
+    class2 = curr_class->get_name();
+  }
+
   if (leq(class1, class2)) {
     return class2;
   } else if (leq(class2, class1)) {
@@ -216,11 +298,34 @@ Symbol ClassTable::lub(Symbol class1, Symbol class2)
   }
 
   Class_ class1_ = lookup_class(class1);
-  assert(class1_);
   if (class1_->get_parent() != No_class) {
     return lub(class1_->get_parent(), class2);
   }
   return Object;
+}
+
+void ClassTable::check_and_add_to_object_table(Symbol name, Symbol type_decl)
+{
+  lookup_class(type_decl);
+  add_to_object_table(name, type_decl);
+}
+
+int ClassTable::add_to_object_table(Symbol name, Symbol type_decl)
+{
+  SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
+
+  if (object_table->probe(name)) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Duplicate variable " << name << " exists in same scope" << endl;
+    return EXIT_FAILURE;
+  }
+  if (name == self) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Variable cannot have name self" << endl;
+    return EXIT_FAILURE;
+  }
+  object_table->addid(name, new Symbol(type_decl));
+  return EXIT_SUCCESS;
 }
 
 Symbol class__class::get_attr(Symbol var)
@@ -290,14 +395,7 @@ int class__class::get_environment()
 
 int attr_class::get_environment()
 {
-  SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
-  if (object_table->probe(name)) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Class " << curr_class << " has duplicate attribute " << name << endl;
-    return EXIT_FAILURE;
-  }
-  object_table->addid(name, new Symbol(type_decl));
-  return EXIT_SUCCESS;
+  return curr_classtable->add_to_object_table(name, type_decl);
 }
 
 int method_class::get_environment()
@@ -306,6 +404,11 @@ int method_class::get_environment()
   if (method_table->find(name) != method_table->end()) {
     curr_classtable->semant_error(curr_class);
     cerr << "Class " << curr_class << " has duplicate method " << name << endl;
+    return EXIT_FAILURE;
+  }
+  if (name == self) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Method cannot have name self" << endl;
     return EXIT_FAILURE;
   }
   method_table->insert(std::pair<Symbol, Feature>(name, this));
@@ -480,7 +583,20 @@ void method_class::semant()
 void formal_class::semant()
 {
   SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
-  object_table->addid(name, new Symbol(type_decl));
+  if (object_table->probe(name)) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Formal " << name << " already exists in function arguments" << endl;
+  }
+  if (name == self) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Formal cannot have name self" << endl;
+
+  }
+  if (type_decl == SELF_TYPE) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Formal cannot have type SELF_TYPE" << endl;
+  }
+  curr_classtable->check_and_add_to_object_table(name, type_decl);
 }
 
 void attr_class::semant()
@@ -488,7 +604,7 @@ void attr_class::semant()
   init->semant();
   if (curr_classtable->leq(init->get_type(), type_decl) == false) {
     curr_classtable->semant_error(curr_class);
-    cerr << "Initialization has type " << init->get_type() << " but function has type " << type_decl << endl;
+    cerr << "Initialization has type " << init->get_type() << " but attribute has type " << type_decl << endl;
   }
 }
 
@@ -570,6 +686,10 @@ void static_dispatch_class::semant()
   }
   if (success) {
     type = method->get_return_type();
+    if (type == SELF_TYPE) {
+      type = expr->get_type();
+    }
+    curr_classtable->lookup_class(type);
   } else {
     type = Object;
   }
@@ -605,6 +725,10 @@ void dispatch_class::semant()
   }
   if (success) {
     type = method->get_return_type();
+    if (type == SELF_TYPE) {
+      type = expr->get_type();
+    }
+    curr_classtable->lookup_class(type);
   } else {
     type = Object;
   }
@@ -654,7 +778,7 @@ void branch_class::semant()
 {
   SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
   object_table->enterscope();
-  object_table->addid(name, new Symbol(type_decl));
+  curr_classtable->check_and_add_to_object_table(name, type_decl);
   expr->semant();
   object_table->exitscope();
 }
@@ -671,9 +795,14 @@ void let_class::semant()
 {
   SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
 
+  if (identifier == self) {
+    curr_classtable->semant_error(curr_class);
+    cerr << "Variable cannot have name self" << endl;
+  }
+
   init->semant();
   object_table->enterscope();
-  object_table->addid(identifier, new Symbol(type_decl));
+  curr_classtable->check_and_add_to_object_table(identifier, type_decl);
   body->semant();
   if (curr_classtable->leq(init->get_type(), type_decl)) {
     type = body->get_type();
@@ -823,11 +952,13 @@ void string_const_class::semant()
 
 void new__class::semant()
 {
+  curr_classtable->lookup_class(type_name);
   type = type_name;
 }
 
 void isvoid_class::semant()
 {
+  e1->semant();
   type = Bool;
 }
 
@@ -839,7 +970,7 @@ void no_expr_class::semant()
 void object_class::semant()
 {
   if (name == self) {
-    type = curr_class->get_name();
+    type = SELF_TYPE;
   } else {
     Symbol type_decl = curr_classtable->lookup_attr(curr_class->get_name(), name);
     if (type_decl) {
@@ -875,7 +1006,9 @@ void program_class::semant()
     if (curr_classtable->install_classes(classes) == EXIT_FAILURE ||
 	curr_classtable->get_environment() == EXIT_FAILURE ||
 	curr_classtable->generate_tree() == EXIT_FAILURE ||
-	curr_classtable->check_cycle() == EXIT_FAILURE) {
+	curr_classtable->check_cycle() == EXIT_FAILURE ||
+	curr_classtable->check_main() == EXIT_FAILURE ||
+	curr_classtable->check_methods() == EXIT_FAILURE) {
       goto error;
     }
 
