@@ -32,8 +32,9 @@ public:
   ostream& semant_error();
   ostream& semant_error(Class_ c);
   ostream& semant_error(Symbol filename, tree_node *t);
-  Class_ lookup(Symbol name);
-  Class_ lookup_parent(Class_ class_);
+  bool leq(Symbol class1, Symbol class2);
+  Class_ lookup_class(Symbol class_name);
+  Symbol lookup_attr(Symbol class_name, Symbol var_name);
   Feature lookup_method(Symbol class_name, Symbol method_name);
   int install_classes(Classes classes);
   int install_class(Symbol name, Class_ class_);

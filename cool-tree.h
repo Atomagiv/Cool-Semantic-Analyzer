@@ -44,6 +44,7 @@ public:
    virtual int get_environment() = 0;
    virtual void add_child(Class_ class_) = 0;
    virtual int check_cycle() = 0;
+   virtual void semant() = 0;
 
    tree_node *copy()		 { return copy_Class_(); }
    virtual Class_ copy_Class_() = 0;
@@ -60,6 +61,7 @@ typedef class Feature_class *Feature;
 class Feature_class : public tree_node {
 public:
    virtual int get_environment() = 0;
+   virtual void semant() = 0;
 
    tree_node *copy()		 { return copy_Feature(); }
    virtual Feature copy_Feature() = 0;
@@ -91,6 +93,7 @@ class Expression_class : public tree_node {
 public:
    tree_node *copy()		 { return copy_Expression(); }
    virtual Expression copy_Expression() = 0;
+   virtual void semant() = 0;
 
 #ifdef Expression_EXTRAS
    Expression_EXTRAS
@@ -105,6 +108,7 @@ class Case_class : public tree_node {
 public:
    tree_node *copy()		 { return copy_Case(); }
    virtual Case copy_Case() = 0;
+   virtual void semant() = 0;
 
 #ifdef Case_EXTRAS
    Case_EXTRAS
@@ -198,6 +202,7 @@ public:
      return method_table;
    }
    int check_cycle();
+   void semant();
    Symbol get_attr(Symbol var);
    Feature get_method(Symbol method);
    int get_environment();
@@ -230,6 +235,7 @@ public:
    }
    int get_environment();
    Feature copy_Feature();
+   void semant();
    void dump(ostream& stream, int n);
 
 #ifdef Feature_SHARED_EXTRAS
@@ -254,6 +260,7 @@ public:
       init = a3;
    }
    int get_environment();
+   void semant();
    Feature copy_Feature();
    void dump(ostream& stream, int n);
 
@@ -300,6 +307,7 @@ public:
       type_decl = a2;
       expr = a3;
    }
+   void semant();
    Case copy_Case();
    void dump(ostream& stream, int n);
 
@@ -322,6 +330,7 @@ public:
       name = a1;
       expr = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -348,6 +357,7 @@ public:
       name = a3;
       actual = a4;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -372,6 +382,7 @@ public:
       name = a2;
       actual = a3;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -396,6 +407,7 @@ public:
       then_exp = a2;
       else_exp = a3;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -418,6 +430,7 @@ public:
       pred = a1;
       body = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -440,6 +453,7 @@ public:
       expr = a1;
       cases = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -460,6 +474,7 @@ public:
    block_class(Expressions a1) {
       body = a1;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -486,6 +501,7 @@ public:
       init = a3;
       body = a4;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -508,6 +524,7 @@ public:
       e1 = a1;
       e2 = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -530,6 +547,7 @@ public:
       e1 = a1;
       e2 = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -552,6 +570,7 @@ public:
       e1 = a1;
       e2 = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -574,6 +593,7 @@ public:
       e1 = a1;
       e2 = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -594,6 +614,7 @@ public:
    neg_class(Expression a1) {
       e1 = a1;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -616,6 +637,7 @@ public:
       e1 = a1;
       e2 = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -638,6 +660,7 @@ public:
       e1 = a1;
       e2 = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -660,6 +683,7 @@ public:
       e1 = a1;
       e2 = a2;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -680,6 +704,7 @@ public:
    comp_class(Expression a1) {
       e1 = a1;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -700,6 +725,7 @@ public:
    int_const_class(Symbol a1) {
       token = a1;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -720,6 +746,7 @@ public:
    bool_const_class(Boolean a1) {
       val = a1;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -740,6 +767,7 @@ public:
    string_const_class(Symbol a1) {
       token = a1;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -760,6 +788,7 @@ public:
    new__class(Symbol a1) {
       type_name = a1;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -780,6 +809,7 @@ public:
    isvoid_class(Expression a1) {
       e1 = a1;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -798,6 +828,7 @@ protected:
 public:
    no_expr_class() {
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
@@ -818,6 +849,7 @@ public:
    object_class(Symbol a1) {
       name = a1;
    }
+   void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
