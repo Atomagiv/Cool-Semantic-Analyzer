@@ -180,6 +180,63 @@ int ClassTable::check_methods()
   return EXIT_SUCCESS;
 }
 
+int method_class::check_attrs()
+{
+  return EXIT_SUCCESS;
+}
+
+int attr_class::check_attrs()
+{
+  if (curr_class->get_parent() != No_class) {
+    if (curr_classtable->lookup_attr(curr_class->get_parent(), name)) {
+      curr_classtable->semant_error(curr_class);
+      cerr << "Attribute " << name << "redefined in class " << curr_class->get_name() << endl;
+      return EXIT_FAILURE;
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
+int class__class::check_attrs()
+{
+  curr_class = this;
+  for (int i = features->first(); features->more(i); i = features->next(i)) {
+    if (features->nth(i)->check_attrs()) {
+      return EXIT_FAILURE;
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
+int ClassTable::check_attrs()
+{
+  SymbolTable<Symbol, Symbol> *object_table;
+  Class_ class_;
+
+  for (std::map<Symbol, Class_>::iterator it = class_table->begin(); it != class_table->end(); it++) {
+    class_ = it->second;
+    if (class_->check_attrs()) {
+      return EXIT_FAILURE;
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
+int ClassTable::check_parents()
+{
+  Class_ class_;
+
+  for (std::map<Symbol, Class_>::iterator it = class_table->begin(); it != class_table->end(); it++) {
+    class_ = it->second;
+    if (class_->get_parent() == Int || class_->get_parent() == Str || class_->get_parent() == Bool) {
+      semant_error(class_);
+      cerr << "Class " << class_->get_name() << " has illegal parent Class of Int, String or Bool" << endl;
+      return EXIT_FAILURE;
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
 int ClassTable::check_main()
 {
   std::map<Symbol, Class_>::iterator it = class_table->find(Main);
@@ -262,14 +319,21 @@ Feature ClassTable::lookup_method(Symbol class_name, Symbol method_name)
 
 bool ClassTable::leq(Symbol class1, Symbol class2)
 {
+  if (class1 == No_type || class2 == No_type) {
+    return true;
+  }
+
+  if (class1 != SELF_TYPE && class2 == SELF_TYPE) {
+    return false;
+  }
   if (class1 == SELF_TYPE) {
     class1 = curr_class->get_name();
   }
   if (class2 == SELF_TYPE) {
-    return false;
+    class2 = curr_class->get_name();
   }
 
-  if (class1 == No_type || class2 == No_type || class1 == class2) {
+  if (class1 == class2) {
     return true;
   }
 
@@ -582,16 +646,6 @@ void method_class::semant()
 
 void formal_class::semant()
 {
-  SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
-  if (object_table->probe(name)) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Formal " << name << " already exists in function arguments" << endl;
-  }
-  if (name == self) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Formal cannot have name self" << endl;
-
-  }
   if (type_decl == SELF_TYPE) {
     curr_classtable->semant_error(curr_class);
     cerr << "Formal cannot have type SELF_TYPE" << endl;
@@ -734,6 +788,20 @@ void dispatch_class::semant()
   }
 }
 
+int typcase_class::check_dups()
+{
+  for(int i = cases->first(); cases->more(i); i = cases->next(i)) {
+    for(int j = cases->next(i); cases->more(j); j = cases->next(j)) {
+      if (cases->nth(i)->get_type_decl() == cases->nth(j)->get_type_decl()) {
+	curr_classtable->semant_error(curr_class);
+	cerr << "Branches in case statement have same type " << cases->nth(i)->get_type_decl() << endl;
+	return EXIT_FAILURE;
+      }
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
 void typcase_class::semant()
 {
   expr->semant();
@@ -745,6 +813,9 @@ void typcase_class::semant()
     } else {
       type = curr_classtable->lub(type, cases->nth(i)->get_expr()->get_type());
     }
+  }
+  if (check_dups()) {
+    type = Object;
   }
 }
 
@@ -808,7 +879,7 @@ void let_class::semant()
     type = body->get_type();
   } else {
     curr_classtable->semant_error(curr_class);
-    cerr << "Expression with type " << init->get_type() << " does not inherit from " <<type_decl << endl;
+    cerr << "Expression with type " << init->get_type() << " does not inherit from " << type_decl << endl;
     type = Object;
   }
   object_table->exitscope();
@@ -1008,7 +1079,9 @@ void program_class::semant()
 	curr_classtable->generate_tree() == EXIT_FAILURE ||
 	curr_classtable->check_cycle() == EXIT_FAILURE ||
 	curr_classtable->check_main() == EXIT_FAILURE ||
-	curr_classtable->check_methods() == EXIT_FAILURE) {
+	curr_classtable->check_methods() == EXIT_FAILURE ||
+	curr_classtable->check_attrs() == EXIT_FAILURE ||
+	curr_classtable->check_parents() == EXIT_FAILURE) {
       goto error;
     }
 

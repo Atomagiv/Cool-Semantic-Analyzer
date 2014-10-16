@@ -34,6 +34,8 @@ public:
   ostream& semant_error(Symbol filename, tree_node *t);
   int compare_methods(Feature method1, Feature method2);
   int check_methods();
+  int check_attrs();
+  int check_parents();
   void check_and_add_to_object_table(Symbol name, Symbol type_decl);
   int add_to_object_table(Symbol name, Symbol type_decl);
   bool leq(Symbol class1, Symbol class2);

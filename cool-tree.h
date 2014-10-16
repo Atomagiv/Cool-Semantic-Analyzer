@@ -44,6 +44,7 @@ public:
    virtual int get_environment() = 0;
    virtual void add_child(Class_ class_) = 0;
    virtual int check_cycle() = 0;
+   virtual int check_attrs() = 0;
    virtual void semant() = 0;
    virtual std::map<Symbol, Feature> * get_method_table() = 0;
 
@@ -61,6 +62,7 @@ typedef class Feature_class *Feature;
 
 class Feature_class : public tree_node {
 public:
+   virtual int check_attrs() = 0;
    virtual int get_environment() = 0;
    virtual Symbol get_name() = 0;
    virtual Symbol get_return_type() = 0;
@@ -119,6 +121,7 @@ public:
    virtual Case copy_Case() = 0;
    virtual void semant() = 0;
    virtual Expression get_expr() = 0;
+   virtual Symbol get_type_decl() = 0;
 
 #ifdef Case_EXTRAS
    Case_EXTRAS
@@ -212,6 +215,7 @@ public:
      return method_table;
    }
    int check_cycle();
+   int check_attrs();
    void semant();
    Symbol get_attr(Symbol var);
    Feature get_method(Symbol method);
@@ -243,6 +247,7 @@ public:
       return_type = a3;
       expr = a4;
    }
+   int check_attrs();
    int get_environment();
    Symbol get_name () {
      return name;
@@ -280,6 +285,7 @@ public:
       type_decl = a2;
       init = a3;
    }
+   int check_attrs();
    int get_environment();
    Symbol get_name () {
      return name;
@@ -351,6 +357,9 @@ public:
       expr = a3;
    }
    void semant();
+   Symbol get_type_decl() {
+     return type_decl;
+   };
    Expression get_expr() {
      return expr;
    };
@@ -499,6 +508,7 @@ public:
       expr = a1;
       cases = a2;
    }
+   int check_dups();
    void semant();
    Expression copy_Expression();
    void dump(ostream& stream, int n);
