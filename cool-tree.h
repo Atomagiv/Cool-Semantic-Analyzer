@@ -47,6 +47,7 @@ public:
    virtual int check_attrs() = 0;
    virtual void semant() = 0;
    virtual std::map<Symbol, Feature> * get_method_table() = 0;
+   virtual SymbolTable<Symbol, Symbol> * get_object_table() = 0;
 
    tree_node *copy()		 { return copy_Class_(); }
    virtual Class_ copy_Class_() = 0;

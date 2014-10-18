@@ -6,10 +6,15 @@
 #include "semant.h"
 #include "utilities.h"
 
+#define ERROR(str)         curr_classtable->semant_error(curr_class);           \
+                           cerr << str << endl;
+#define SEMANT_ERROR(str)  curr_classtable->semant_error(curr_class);           \
+                           cerr << str << endl;                                 \
+			   type = Object;
 
 extern int semant_debug;
 extern char *curr_filename;
-static class__class *curr_class;
+static Class__class *curr_class;
 static ClassTable *curr_classtable;
 //////////////////////////////////////////////////////////////////////
 //
@@ -117,20 +122,19 @@ int ClassTable::get_environment()
 int ClassTable::generate_tree()
 {
   std::map<Symbol, Class_>::iterator pit;
-  Class_ class_, parent;
+  Class_ parent;
 
   for (std::map<Symbol, Class_>::iterator it = class_table->begin(); it != class_table->end(); it++) {
-    class_ = it->second;
-    if (class_->get_parent() == No_class) {
+    curr_class = it->second;
+    if (curr_class->get_parent() == No_class) {
       continue;
     }
-    if ((pit = class_table->find(class_->get_parent())) == class_table->end()) {
-      semant_error(class_);
-      cerr << "No parent class " << class_->get_parent() << " found" << endl;
+    if ((pit = class_table->find(curr_class->get_parent())) == class_table->end()) {
+      ERROR("No parent class " << curr_class->get_parent() << " found");
       return EXIT_FAILURE;
     }
     parent = pit->second;
-    parent->add_child(class_);
+    parent->add_child(curr_class);
   }
   return EXIT_SUCCESS;
 }
@@ -156,23 +160,21 @@ int ClassTable::check_methods()
 {
   std::map<Symbol, Feature> *method_table;
   Feature child_method, parent_method;
-  Class_ class_;
 
   for (std::map<Symbol, Class_>::iterator it = class_table->begin(); it != class_table->end(); it++) {
-    class_ = it->second;
-    if (class_->get_parent() == No_class) {
+    curr_class = it->second;
+    if (curr_class->get_parent() == No_class) {
       continue;
     }
-    method_table = class_->get_method_table();
+    method_table = curr_class->get_method_table();
     for (std::map<Symbol, Feature>::iterator itt = method_table->begin(); itt != method_table->end(); itt++) {
       child_method = itt->second;
-      parent_method = lookup_method(class_->get_parent(), child_method->get_name());
+      parent_method = lookup_method(curr_class->get_parent(), child_method->get_name());
       if (parent_method == NULL) {
 	continue;
       }
       if (compare_methods(child_method, parent_method)) {
-	semant_error(class_);
-	cerr << "Method " << child_method->get_name() << " redefined with different parameters and/or return type" << endl;
+	ERROR("Method " << child_method->get_name() << " redefined with different parameters and/or return type");
 	return EXIT_FAILURE;
       }
     }
@@ -189,8 +191,7 @@ int attr_class::check_attrs()
 {
   if (curr_class->get_parent() != No_class) {
     if (curr_classtable->lookup_attr(curr_class->get_parent(), name)) {
-      curr_classtable->semant_error(curr_class);
-      cerr << "Attribute " << name << "redefined in class " << curr_class->get_name() << endl;
+      ERROR("Attribute " << name << "redefined in class " << curr_class->get_name());
       return EXIT_FAILURE;
     }
   }
@@ -224,13 +225,10 @@ int ClassTable::check_attrs()
 
 int ClassTable::check_parents()
 {
-  Class_ class_;
-
   for (std::map<Symbol, Class_>::iterator it = class_table->begin(); it != class_table->end(); it++) {
-    class_ = it->second;
-    if (class_->get_parent() == Int || class_->get_parent() == Str || class_->get_parent() == Bool) {
-      semant_error(class_);
-      cerr << "Class " << class_->get_name() << " has illegal parent Class of Int, String or Bool" << endl;
+    curr_class = it->second;
+    if (curr_class->get_parent() == Int || curr_class->get_parent() == Str || curr_class->get_parent() == Bool) {
+      ERROR("Class " << curr_class->get_name() << " has illegal parent Class of Int, String or Bool");
       return EXIT_FAILURE;
     }
   }
@@ -251,7 +249,7 @@ int ClassTable::check_main()
 int ClassTable::check_cycle()
 {
   std::map<Symbol, Class_>::iterator it = class_table->find(Object);
-  Class_ object_class, class_;
+  Class_ object_class;
 
   assert(it != class_table->end());
   object_class = it->second;
@@ -261,10 +259,9 @@ int ClassTable::check_cycle()
 
   /* Check for classes left outside Object-rooted inheritance tree i.e. C -> B and B -> C */
   for (std::map<Symbol, Class_>::iterator it = class_table->begin(); it != class_table->end(); it++) {
-    class_ = it->second;
-    if (class_->get_marked() == false) {
-      semant_error(class_);
-      cerr << "Class inheritance cycle has been detected for class " << class_->get_name() << endl;
+    curr_class = it->second;
+    if (curr_class->get_marked() == false) {
+      ERROR("Class inheritance cycle has been detected for class " << curr_class->get_name());
       return EXIT_FAILURE;
     }
   }
@@ -294,8 +291,7 @@ Class_ ClassTable::lookup_class(Symbol class_name)
   }
   std::map<Symbol, Class_>::iterator it = class_table->find(class_name);
   if (it == class_table->end()) {
-    semant_error(curr_class);
-    cerr << "Type " << class_name << " does not exist" << endl;
+    ERROR("Type " << class_name << " does not exist");
     it = class_table->find(Object);
     assert(it != class_table->end());
   }
@@ -379,13 +375,11 @@ int ClassTable::add_to_object_table(Symbol name, Symbol type_decl)
   SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
 
   if (object_table->probe(name)) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Duplicate variable " << name << " exists in same scope" << endl;
+    ERROR("Duplicate variable " << name << " exists in same scope");
     return EXIT_FAILURE;
   }
   if (name == self) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Variable cannot have name self" << endl;
+    ERROR("Variable cannot have name self");
     return EXIT_FAILURE;
   }
   object_table->addid(name, new Symbol(type_decl));
@@ -466,13 +460,11 @@ int method_class::get_environment()
 {
   std::map<Symbol, Feature> *method_table = curr_class->get_method_table();
   if (method_table->find(name) != method_table->end()) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Class " << curr_class << " has duplicate method " << name << endl;
+    ERROR("Class " << curr_class << " has duplicate method " << name);
     return EXIT_FAILURE;
   }
   if (name == self) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Method cannot have name self" << endl;
+    ERROR("Method cannot have name self");
     return EXIT_FAILURE;
   }
   method_table->insert(std::pair<Symbol, Feature>(name, this));
@@ -667,27 +659,19 @@ void assign_class::semant()
   Symbol type_decl = curr_classtable->lookup_attr(curr_class->get_name(), name);
   expr->semant();
   if (!type_decl) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Variable " << name << " does not exist in this scope" << endl;
-    type = Object;
-    return;
-  }
-  if (curr_classtable->leq(expr->get_type(), type_decl)) {
-    type = expr->get_type();
+    SEMANT_ERROR("Variable " << name << " does not exist in this scope");
   } else {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Expression type " << expr->get_type() << " does not inherit from " << type_decl << endl;
-    type = Object;
+    if (curr_classtable->leq(expr->get_type(), type_decl)) {
+      type = expr->get_type();
+    } else {
+      SEMANT_ERROR("Expression type " << expr->get_type() << " does not inherit from " << type_decl);
+    }
   }
 }
 
 int method_class::get_arg_len()
 {
-  int i = formals->first();
-  while(formals->more(i)) {
-    i = formals->next(i);
-  }
-  return i;
+  return formals->len();
 }
 
 Symbol method_class::get_arg_type(int i)
@@ -696,35 +680,14 @@ Symbol method_class::get_arg_type(int i)
   return formals->nth(i)->get_type_decl();
 }
 
-int get_arg_len(Expressions exprs)
+Symbol dispatch_common(Expression expr, Symbol type_name, Symbol name, Expressions actual, Feature method)
 {
-  int i = exprs->first();
-  while(exprs->more(i)) {
-    i = exprs->next(i);
-  }
-  return i;
-}
-
-void static_dispatch_class::semant()
-{
-  bool success = true;
-  Feature method;
-
-  expr->semant();
-  if (curr_classtable->leq(expr->get_type(), type_name) == false) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Expression of type " << expr->get_type() << " does not inherit from static dispatch type name " << type_name << endl;
-    success = false;
-  }
-  method = curr_classtable->lookup_method(type_name, name);
   if (method == NULL) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "No method " << name << " in class " << type_name << " found" << endl;
-    success = false;
-  } else if (method->get_arg_len() != get_arg_len(actual)) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Method " << method->get_name() << " only has " << method->get_arg_len() << " arguments" << endl;
-    success = false;
+    ERROR("No method " << name << " in class " << type_name << " found");
+    return Object;
+  } else if (method->get_arg_len() != actual->len()) {
+    ERROR("Method " << method->get_name() << " only has " << method->get_arg_len() << " arguments");
+    return Object;
   }
   for(int i = actual->first(); actual->more(i); i = actual->next(i)) {
     actual->nth(i)->semant();
@@ -733,59 +696,34 @@ void static_dispatch_class::semant()
       continue;
     }
     if (curr_classtable->leq(actual->nth(i)->get_type(), method->get_arg_type(i)) == false) {
-      curr_classtable->semant_error(curr_class);
-      cerr << "Method " << method->get_name() << " argument " << i + 1<< " has type " << method->get_arg_type(i) << endl;
-      success = false;
+      ERROR("Method " << method->get_name() << " argument " << i + 1<< " has type " << method->get_arg_type(i));
+      return Object;
     }
   }
-  if (success) {
-    type = method->get_return_type();
-    if (type == SELF_TYPE) {
-      type = expr->get_type();
-    }
-    curr_classtable->lookup_class(type);
+  Symbol type = method->get_return_type();
+  if (type == SELF_TYPE) {
+    type = expr->get_type();
+  }
+  curr_classtable->lookup_class(type);
+  return type;
+}
+
+void static_dispatch_class::semant()
+{
+  expr->semant();
+  if (curr_classtable->leq(expr->get_type(), type_name)) {
+    Feature method = curr_classtable->lookup_method(type_name, name);
+    type = dispatch_common(expr, type_name, name, actual, method);
   } else {
-    type = Object;
+    SEMANT_ERROR("Expression of type " << expr->get_type() << " does not inherit from static dispatch type name " << type_name);
   }
 }
 
 void dispatch_class::semant()
 {
-  bool success = true;
-  Feature method;
-
   expr->semant();
-  method = curr_classtable->lookup_method(expr->get_type(), name);
-  if (method == NULL) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "No method " << name << " in class " << expr->get_type() << " found" << endl;
-    success = false;
-  } else if (method->get_arg_len() != get_arg_len(actual)) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Method " << method->get_name() << " only has " << method->get_arg_len() << " arguments" << endl;
-    success = false;
-  }
-  for(int i = actual->first(); actual->more(i); i = actual->next(i)) {
-    actual->nth(i)->semant();
-    if (method == NULL || i >= method->get_arg_len()) {
-      /* Number of arguments is different, error should've been caught above */
-      continue;
-    }
-    if (curr_classtable->leq(actual->nth(i)->get_type(), method->get_arg_type(i)) == false) {
-      curr_classtable->semant_error(curr_class);
-      cerr << "Method " << method->get_name() << " argument " << i + 1 << " has type " << method->get_arg_type(i) << endl;
-      success = false;
-    }
-  }
-  if (success) {
-    type = method->get_return_type();
-    if (type == SELF_TYPE) {
-      type = expr->get_type();
-    }
-    curr_classtable->lookup_class(type);
-  } else {
-    type = Object;
-  }
+  Feature method = curr_classtable->lookup_method(expr->get_type(), name);
+  type = dispatch_common(expr, expr->get_type(), name, actual, method);
 }
 
 int typcase_class::check_dups()
@@ -793,8 +731,7 @@ int typcase_class::check_dups()
   for(int i = cases->first(); cases->more(i); i = cases->next(i)) {
     for(int j = cases->next(i); cases->more(j); j = cases->next(j)) {
       if (cases->nth(i)->get_type_decl() == cases->nth(j)->get_type_decl()) {
-	curr_classtable->semant_error(curr_class);
-	cerr << "Branches in case statement have same type " << cases->nth(i)->get_type_decl() << endl;
+	ERROR("Branches in case statement have same type " << cases->nth(i)->get_type_decl());
 	return EXIT_FAILURE;
       }
     }
@@ -828,9 +765,7 @@ void cond_class::semant()
   if (pred->get_type() == Bool) {
     type = curr_classtable->lub(then_exp->get_type(), else_exp->get_type());
   } else {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Predicate of conditional is not of type Bool" << endl;
-    type = Object;
+    SEMANT_ERROR("Predicate of conditional is not of type Bool");
   }
 }
 
@@ -839,8 +774,7 @@ void loop_class::semant()
   pred->semant();
   body->semant();
   if (pred->get_type() != Bool) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Predicate does not have type Bool" << endl;
+    SEMANT_ERROR("Predicate does not have type Bool");
   }
   type = Object;
 }
@@ -866,11 +800,6 @@ void let_class::semant()
 {
   SymbolTable<Symbol, Symbol> *object_table = curr_class->get_object_table();
 
-  if (identifier == self) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Variable cannot have name self" << endl;
-  }
-
   init->semant();
   object_table->enterscope();
   curr_classtable->check_and_add_to_object_table(identifier, type_decl);
@@ -878,9 +807,7 @@ void let_class::semant()
   if (curr_classtable->leq(init->get_type(), type_decl)) {
     type = body->get_type();
   } else {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Expression with type " << init->get_type() << " does not inherit from " << type_decl << endl;
-    type = Object;
+    SEMANT_ERROR("Expression with type " << init->get_type() << " does not inherit from " << type_decl);
   }
   object_table->exitscope();
 }
@@ -889,10 +816,8 @@ void plus_class::semant()
 {
   e1->semant();
   e2->semant();
-  if (e1->get_type() !=Int || e2->get_type() != Int) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "One of the expressions for multiply does not evaluate to Integer" << endl;
-    type = Object;
+  if (e1->get_type() != Int || e2->get_type() != Int) {
+    SEMANT_ERROR("One of the expressions for multiply does not evaluate to Integer");
   } else {
     type = Int;
   }
@@ -903,9 +828,7 @@ void sub_class::semant()
   e1->semant();
   e2->semant();
   if (e1->get_type() !=Int || e2->get_type() != Int) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "One of the expressions for multiply does not evaluate to Integer" << endl;
-    type = Object;
+    SEMANT_ERROR("One of the expressions for multiply does not evaluate to Integer");
   } else {
     type = Int;
   }
@@ -916,16 +839,13 @@ void eq_class::semant()
 {
     e1->semant();
     e2->semant();
-    if (e1->get_type() == Int || e1->get_type() == Bool || e1->get_type() == Str ||
-	e2->get_type() ==Int || e2->get_type() == Bool || e2->get_type() == Str) {
-      if (e1->get_type() != e2->get_type()) {
-	curr_classtable->semant_error(curr_class);
-	cerr << "Expressions of types " << e1->get_type() << " and " << e2->get_type() << " cannot be compared" << endl;
-	type = Object;
-	return;
-      }
+    if ((e1->get_type() == Int || e1->get_type() == Bool || e1->get_type() == Str ||
+	e2->get_type() ==Int || e2->get_type() == Bool || e2->get_type() == Str)
+	&& e1->get_type() != e2->get_type()) {
+      SEMANT_ERROR("Expressions of types " << e1->get_type() << " and " << e2->get_type() << " cannot be compared");
+    } else {
+      type = Bool;
     }
-    type = Bool;
 }
 
 void mul_class::semant()
@@ -933,9 +853,7 @@ void mul_class::semant()
   e1->semant();
   e2->semant();
   if (e1->get_type() !=Int || e2->get_type() != Int) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "One of the expressions for multiply does not evaluate to Integer" << endl;
-    type = Object;
+    SEMANT_ERROR("One of the expressions for multiply does not evaluate to Integer");
   } else {
     type = Int;
   }
@@ -946,9 +864,7 @@ void divide_class::semant()
   e1->semant();
   e2->semant();
   if (e1->get_type() !=Int || e2->get_type() != Int) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "One of the expressions for divide does not evaluate to Integer" << endl;
-    type = Object;
+    SEMANT_ERROR("One of the expressions for divide does not evaluate to Integer");
   } else {
     type = Int;
   }
@@ -961,9 +877,7 @@ void neg_class::semant()
   if (e1->get_type() == Int) {
     type = Int;
   } else {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Expression does not have Integer type" << endl;
-    type = Object;
+    SEMANT_ERROR("Expression does not have Integer type");
   }
 }
 
@@ -972,9 +886,7 @@ void lt_class::semant()
   e1->semant();
   e2->semant();
   if (e1->get_type() !=Int || e2->get_type() != Int) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "One of the expressions for lt does not evaluate to Integer" << endl;
-    type = Object;
+    SEMANT_ERROR("One of the expressions for lt does not evaluate to Integer");
   } else {
     type = Bool;
   }
@@ -986,9 +898,7 @@ void leq_class::semant()
   e1->semant();
   e2->semant();
   if (e1->get_type() != Int || e2->get_type() != Int) {
-    curr_classtable->semant_error(curr_class);
-    cerr << "One of the expressions for leq does not evaluate to Integer" << endl;
-    type = Object;
+    SEMANT_ERROR("One of the expressions for leq does not evaluate to Integer");
   } else {
     type = Bool;
   }
@@ -1000,9 +910,7 @@ void comp_class::semant()
   if (e1->get_type() == Bool) {
     type = Bool;
   } else {
-    curr_classtable->semant_error(curr_class);
-    cerr << "Expression does not have type Bool" << endl;
-    type = Object;
+    SEMANT_ERROR("Expression does not have type Bool");
   }
 }
 
@@ -1047,9 +955,7 @@ void object_class::semant()
     if (type_decl) {
       type = type_decl;
     } else {
-      curr_classtable->semant_error(curr_class);
-      cerr << "Object " << name << " not declared in scope" << endl;
-      type = Object;
+      SEMANT_ERROR("Object " << name << " not declared in scope");
     }
   }
 }
